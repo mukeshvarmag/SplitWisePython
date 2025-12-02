@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Community Money Split</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+<script>
+function toggleCustom(mode){
+  const disabled = mode !== 'custom';
+  document.querySelectorAll('.share-input').forEach(el => el.disabled = disabled);
+}
+</script>
+</head>
+<body>
+<h2>Community Money Split</h2>
+
+<div class="flex">
+  <div class="card">
+    <h3>Participants</h3>
+    <form method="post" action="{{ url_for('add_person') }}" class="row">
+      <input type="text" name="name" placeholder="Name" required>
+      <button type="submit" class="btn">Add Person</button>
+    </form>
+    <ul class="list">
+      {% for p in people %}
+      <li class="list-item">
+        <span>{{ p }}</span>
+        <form method="post" action="{{ url_for('remove_person') }}">
+          <input type="hidden" name="name" value="{{ p }}">
+          <button type="submit" class="btn btn-danger">Remove</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>Add Expense</h3>
+    <form method="post" action="{{ url_for('add_expense') }}" class="form">
+      <input type="text" name="desc" placeholder="Description">
+      <input type="number" step="0.01" name="amount" placeholder="Amount" required>
+      <select name="payer" required>
+        <option value="">Payer</option>
+        {% for p in people %}
+        <option value="{{ p }}">{{ p }}</option>
+        {% endfor %}
+      </select>
+      <div class="row">
+        <label><input type="radio" name="split_mode" value="equal" checked onclick="toggleCustom('equal')"> Equal</label>
+        <label><input type="radio" name="split_mode" value="custom" onclick="toggleCustom('custom')"> Custom</label>
+      </div>
+      <div class="scroll">
+        {% for p in people %}
+          <div class="row space-between">
+            <label class="row">
+              <input type="checkbox" name="participants" value="{{ p }}" checked> <span>{{ p }}</span>
+            </label>
+            <input class="share-input" type="number" step="0.01" name="share_{{ p }}" placeholder="Share ₹" disabled>
+          </div>
+        {% endfor %}
+      </div>
+      <button type="submit" class="btn">Add Expense</button>
+    </form>
+  </div>
+
+  <div class="card grow">
+    <h3>Expenses</h3>
+    <table class="table">
+      <thead><tr><th>#</th><th>Desc</th><th>Payer</th><th>Amount</th><th>Split</th><th></th></tr></thead>
+      <tbody>
+      {% for e in expenses %}
+        <tr>
+          <td>{{ loop.index0 }}</td>
+          <td>{{ e.desc }}</td>
+          <td>{{ e.payer }}</td>
+          <td>₹{{ "%.2f"|format(e.amount) }}</td>
+          <td>
+            {% if e.shares %}
+              {% for k,v in e.shares.items() %}
+                {{ k }}:₹{{ "%.2f"|format(v) }}{% if not loop.last %}, {% endif %}
+              {% endfor %}
+            {% else %}
+              Equal: {{ e.participants|join(", ") }}
+            {% endif %}
+          </td>
+          <td>
+            <form method="post" action="{{ url_for('remove_expense') }}">
+              <input type="hidden" name="idx" value="{{ loop.index0 }}">
+              <button type="submit" class="btn btn-danger">Remove</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="flex">
+  <div class="card">
+    <h3>Balances</h3>
+    <ul class="list">
+      {% for p, b in balances.items() %}
+        <li class="list-item">{{ p }}: {% if b < 0 %}owes{% else %}is owed{% endif %} ₹{{ "%.2f"|format(b.copy_abs()) }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  <div class="card grow">
+    <h3>Settlements</h3>
+    {% if settlements %}
+      {% for s in settlements %}
+      <div class="settlement">{{ s }}</div>
+      {% endfor %}
+    {% else %}
+      <div class="settlement">No settlements needed.</div>
+    {% endif %}
+  </div>
+</div>
+
+</body>
+</html>
+

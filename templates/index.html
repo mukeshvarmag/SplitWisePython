@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Community Money Split</title>
+<title>Hangout Split</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 <script>
 function toggleCustom(mode){
@@ -12,7 +12,7 @@ function toggleCustom(mode){
 </script>
 </head>
 <body>
-<h2>Community Money Split</h2>
+<h2>Hangout Split</h2>
 
 <div class="flex">
   <div class="card">
@@ -49,7 +49,8 @@ function toggleCustom(mode){
         <label><input type="radio" name="split_mode" value="equal" checked onclick="toggleCustom('equal')"> Equal</label>
         <label><input type="radio" name="split_mode" value="custom" onclick="toggleCustom('custom')"> Custom</label>
       </div>
-      <div class="scroll">
+      <!-- html -->
+      <div class="scroll" style="margin-top: 12px;">
         {% for p in people %}
           <div class="row space-between">
             <label class="row">
@@ -59,7 +60,8 @@ function toggleCustom(mode){
           </div>
         {% endfor %}
       </div>
-      <button type="submit" class="btn">Add Expense</button>
+      <!-- html -->
+      <button type="submit" class="btn" style="margin-top: 12px;">Add Expense</button>
     </form>
   </div>
 

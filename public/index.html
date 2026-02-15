@@ -7,7 +7,46 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<h2>Hangout Split</h2>
+
+<!-- Login Section -->
+<div id="loginSection" class="login-container">
+  <div class="login-card">
+    <h2>🧾 Hangout Split</h2>
+    <p class="login-subtitle">Split expenses with friends easily</p>
+
+    <div id="loginForm">
+      <input type="email" id="loginEmail" placeholder="Email" class="login-input">
+      <input type="password" id="loginPassword" placeholder="Password" class="login-input">
+      <button id="emailLoginBtn" class="btn login-btn">Sign In</button>
+      <button id="emailSignupBtn" class="btn login-btn btn-secondary">Create Account</button>
+
+      <div class="divider"><span>or</span></div>
+
+      <button id="googleLoginBtn" class="btn login-btn btn-google">
+        <svg width="18" height="18" viewBox="0 0 18 18" style="margin-right: 8px;">
+          <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
+          <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
+          <path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/>
+          <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>
+        </svg>
+        Sign in with Google
+      </button>
+    </div>
+
+    <p id="loginError" class="login-error"></p>
+  </div>
+</div>
+
+<!-- Main App Section (hidden until logged in) -->
+<div id="appSection" style="display: none;">
+
+<div class="header-row">
+  <h2>🧾 Hangout Split</h2>
+  <div class="user-info">
+    <span id="userEmail"></span>
+    <button id="logoutBtn" class="btn btn-danger">Logout</button>
+  </div>
+</div>
 
 <div class="flex">
   <div class="card">
@@ -56,10 +95,13 @@
   </div>
 </div>
 
+</div> <!-- End of appSection -->
+
 <!-- Firebase SDK -->
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
-  import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+  import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, where } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+  import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 
   // Firebase configuration
   const firebaseConfig = {
@@ -75,10 +117,130 @@
   // Initialize Firebase
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
+  const auth = getAuth(app);
+  const googleProvider = new GoogleAuthProvider();
+
+  // Auth DOM Elements
+  const loginSection = document.getElementById('loginSection');
+  const appSection = document.getElementById('appSection');
+  const loginEmail = document.getElementById('loginEmail');
+  const loginPassword = document.getElementById('loginPassword');
+  const loginError = document.getElementById('loginError');
+  const userEmailSpan = document.getElementById('userEmail');
+
+  // Current user
+  let currentUser = null;
+
+  // Auth state listener
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      currentUser = user;
+      loginSection.style.display = 'none';
+      appSection.style.display = 'block';
+      userEmailSpan.textContent = user.email || user.displayName || 'User';
+      initializeApp_Data();
+    } else {
+      currentUser = null;
+      loginSection.style.display = 'flex';
+      appSection.style.display = 'none';
+      // Clear listeners
+      people = [];
+      expenses = [];
+    }
+  });
+
+  // Email Sign In
+  document.getElementById('emailLoginBtn').addEventListener('click', async () => {
+    const email = loginEmail.value.trim();
+    const password = loginPassword.value;
+    loginError.textContent = '';
+
+    if (!email || !password) {
+      loginError.textContent = 'Please enter email and password';
+      return;
+    }
+
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      loginError.textContent = error.message;
+    }
+  });
+
+  // Email Sign Up
+  document.getElementById('emailSignupBtn').addEventListener('click', async () => {
+    const email = loginEmail.value.trim();
+    const password = loginPassword.value;
+    loginError.textContent = '';
+
+    if (!email || !password) {
+      loginError.textContent = 'Please enter email and password';
+      return;
+    }
+
+    if (password.length < 6) {
+      loginError.textContent = 'Password must be at least 6 characters';
+      return;
+    }
+
+    try {
+      await createUserWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      loginError.textContent = error.message;
+    }
+  });
+
+  // Google Sign In
+  document.getElementById('googleLoginBtn').addEventListener('click', async () => {
+    loginError.textContent = '';
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      loginError.textContent = error.message;
+    }
+  });
+
+  // Logout
+  document.getElementById('logoutBtn').addEventListener('click', async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  });
 
   // State
   let people = [];
   let expenses = [];
+  let unsubscribePeople = null;
+  let unsubscribeExpenses = null;
+
+  // Initialize app data for logged in user
+  function initializeApp_Data() {
+    // Unsubscribe from previous listeners
+    if (unsubscribePeople) unsubscribePeople();
+    if (unsubscribeExpenses) unsubscribeExpenses();
+
+    // Listen for people changes (user-specific)
+    unsubscribePeople = onSnapshot(
+      query(collection(db, `users/${currentUser.uid}/people`), orderBy('createdAt')),
+      (snapshot) => {
+        people = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        renderPeople();
+        recompute();
+      }
+    );
+
+    // Listen for expenses changes (user-specific)
+    unsubscribeExpenses = onSnapshot(
+      query(collection(db, `users/${currentUser.uid}/expenses`), orderBy('createdAt')),
+      (snapshot) => {
+        expenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        renderExpenses();
+        recompute();
+      }
+    );
+  }
 
   // DOM Elements
   const peopleList = document.getElementById('peopleList');
@@ -238,7 +400,7 @@
       alert('Person already exists!');
       return;
     }
-    await addDoc(collection(db, 'people'), { name, createdAt: Date.now() });
+    await addDoc(collection(db, `users/${currentUser.uid}/people`), { name, createdAt: Date.now() });
     document.getElementById('personName').value = '';
   });
 
@@ -257,7 +419,7 @@
       return;
     }
 
-    await deleteDoc(doc(db, 'people', id));
+    await deleteDoc(doc(db, `users/${currentUser.uid}/people`, id));
   };
 
   // Add expense
@@ -295,7 +457,7 @@
       }
     }
 
-    await addDoc(collection(db, 'expenses'), {
+    await addDoc(collection(db, `users/${currentUser.uid}/expenses`), {
       desc,
       amount,
       payer,
@@ -314,22 +476,8 @@
 
   // Remove expense
   window.removeExpense = async function(id) {
-    await deleteDoc(doc(db, 'expenses', id));
+    await deleteDoc(doc(db, `users/${currentUser.uid}/expenses`, id));
   };
-
-  // Listen for people changes
-  onSnapshot(query(collection(db, 'people'), orderBy('createdAt')), (snapshot) => {
-    people = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    renderPeople();
-    recompute();
-  });
-
-  // Listen for expenses changes
-  onSnapshot(query(collection(db, 'expenses'), orderBy('createdAt')), (snapshot) => {
-    expenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    renderExpenses();
-    recompute();
-  });
 </script>
 
 </body>

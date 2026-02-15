@@ -2,8 +2,21 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Hangout Split</title>
+
+<!-- PWA Meta Tags -->
+<meta name="description" content="Split expenses with friends easily">
+<meta name="theme-color" content="#6366f1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="HangoutSplit">
+
+<!-- PWA Manifest & Icons -->
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/svg+xml" href="/icons/icon-192x192.svg">
+<link rel="apple-touch-icon" href="/icons/icon-192x192.svg">
+
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -478,6 +491,61 @@
   window.removeExpense = async function(id) {
     await deleteDoc(doc(db, `users/${currentUser.uid}/expenses`, id));
   };
+</script>
+
+<!-- PWA Install Banner -->
+<div id="installBanner" class="install-banner" style="display: none;">
+  <span>📱 Install app for better experience</span>
+  <button id="installBtn" class="btn">Install</button>
+  <button id="closeBanner" class="close-btn">×</button>
+</div>
+
+<!-- Service Worker & Install Prompt -->
+<script>
+  // Register Service Worker
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js')
+        .then((reg) => console.log('SW registered:', reg.scope))
+        .catch((err) => console.log('SW failed:', err));
+    });
+  }
+
+  // PWA Install Prompt
+  let deferredPrompt;
+  const installBanner = document.getElementById('installBanner');
+  const installBtn = document.getElementById('installBtn');
+  const closeBanner = document.getElementById('closeBanner');
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    // Show install banner
+    if (!localStorage.getItem('pwaInstallDismissed')) {
+      installBanner.style.display = 'flex';
+    }
+  });
+
+  installBtn.addEventListener('click', async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      console.log('Install outcome:', outcome);
+      deferredPrompt = null;
+      installBanner.style.display = 'none';
+    }
+  });
+
+  closeBanner.addEventListener('click', () => {
+    installBanner.style.display = 'none';
+    localStorage.setItem('pwaInstallDismissed', 'true');
+  });
+
+  // Hide banner if app is already installed
+  window.addEventListener('appinstalled', () => {
+    installBanner.style.display = 'none';
+    console.log('App installed!');
+  });
 </script>
 
 </body>

@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hangout Split</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<h2>Hangout Split</h2>
+
+<div class="flex">
+  <div class="card">
+    <h3>Participants</h3>
+    <form id="addPersonForm" class="row">
+      <input type="text" id="personName" placeholder="Name" required>
+      <button type="submit" class="btn">Add Person</button>
+    </form>
+    <ul class="list" id="peopleList"></ul>
+  </div>
+
+  <div class="card">
+    <h3>Add Expense</h3>
+    <form id="addExpenseForm" class="form">
+      <input type="text" id="expenseDesc" placeholder="Description">
+      <input type="number" step="0.01" id="expenseAmount" placeholder="Amount" required>
+      <select id="expensePayer" required>
+        <option value="">Payer</option>
+      </select>
+      <div class="row">
+        <label><input type="radio" name="split_mode" value="equal" checked onclick="toggleCustom('equal')"> Equal</label>
+        <label><input type="radio" name="split_mode" value="custom" onclick="toggleCustom('custom')"> Custom</label>
+      </div>
+      <div class="scroll" style="margin-top: 12px;" id="participantsDiv"></div>
+      <button type="submit" class="btn" style="margin-top: 12px;">Add Expense</button>
+    </form>
+  </div>
+
+  <div class="card grow">
+    <h3>Expenses</h3>
+    <table class="table">
+      <thead><tr><th>#</th><th>Desc</th><th>Payer</th><th>Amount</th><th>Split</th><th></th></tr></thead>
+      <tbody id="expensesBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="flex">
+  <div class="card">
+    <h3>Balances</h3>
+    <ul class="list" id="balancesList"></ul>
+  </div>
+  <div class="card grow">
+    <h3>Settlements</h3>
+    <div id="settlementsList"></div>
+  </div>
+</div>
+
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+  import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+
+  // TODO: Replace with your Firebase config
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT_ID.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // State
+  let people = [];
+  let expenses = [];
+
+  // DOM Elements
+  const peopleList = document.getElementById('peopleList');
+  const expensesBody = document.getElementById('expensesBody');
+  const balancesList = document.getElementById('balancesList');
+  const settlementsList = document.getElementById('settlementsList');
+  const payerSelect = document.getElementById('expensePayer');
+  const participantsDiv = document.getElementById('participantsDiv');
+
+  // Toggle custom split inputs
+  window.toggleCustom = function(mode) {
+    const disabled = mode !== 'custom';
+    document.querySelectorAll('.share-input').forEach(el => el.disabled = disabled);
+  };
+
+  // Update participants UI
+  function updateParticipantsUI() {
+    payerSelect.innerHTML = '<option value="">Payer</option>';
+    participantsDiv.innerHTML = '';
+
+    people.forEach(p => {
+      // Payer dropdown
+      const opt = document.createElement('option');
+      opt.value = p.name;
+      opt.textContent = p.name;
+      payerSelect.appendChild(opt);
+
+      // Participants checkboxes
+      const div = document.createElement('div');
+      div.className = 'row space-between';
+      div.innerHTML = `
+        <label class="row">
+          <input type="checkbox" name="participants" value="${p.name}" checked> <span>${p.name}</span>
+        </label>
+        <input class="share-input" type="number" step="0.01" data-person="${p.name}" placeholder="Share ₹" disabled>
+      `;
+      participantsDiv.appendChild(div);
+    });
+  }
+
+  // Render people list
+  function renderPeople() {
+    peopleList.innerHTML = '';
+    people.forEach(p => {
+      const li = document.createElement('li');
+      li.className = 'list-item';
+      li.innerHTML = `
+        <span>${p.name}</span>
+        <button class="btn btn-danger" onclick="removePerson('${p.id}')">Remove</button>
+      `;
+      peopleList.appendChild(li);
+    });
+    updateParticipantsUI();
+  }
+
+  // Render expenses
+  function renderExpenses() {
+    expensesBody.innerHTML = '';
+    expenses.forEach((e, idx) => {
+      const tr = document.createElement('tr');
+      let splitText = '';
+      if (e.shares && Object.keys(e.shares).length > 0) {
+        splitText = Object.entries(e.shares).map(([k, v]) => `${k}:₹${v.toFixed(2)}`).join(', ');
+      } else {
+        splitText = `Equal: ${e.participants.join(', ')}`;
+      }
+      tr.innerHTML = `
+        <td>${idx}</td>
+        <td>${e.desc}</td>
+        <td>${e.payer}</td>
+        <td>₹${e.amount.toFixed(2)}</td>
+        <td>${splitText}</td>
+        <td><button class="btn btn-danger" onclick="removeExpense('${e.id}')">Remove</button></td>
+      `;
+      expensesBody.appendChild(tr);
+    });
+  }
+
+  // Compute balances and settlements
+  function recompute() {
+    const balances = {};
+    people.forEach(p => balances[p.name] = 0);
+
+    expenses.forEach(e => {
+      const amount = e.amount;
+      const payer = e.payer;
+      const participants = e.participants || [];
+
+      if (!participants.length) return;
+
+      balances[payer] = (balances[payer] || 0) + amount;
+
+      if (e.shares && Object.keys(e.shares).length > 0) {
+        Object.entries(e.shares).forEach(([person, share]) => {
+          balances[person] = (balances[person] || 0) - share;
+        });
+      } else {
+        const share = amount / participants.length;
+        participants.forEach(p => {
+          balances[p] = (balances[p] || 0) - share;
+        });
+      }
+    });
+
+    // Round balances
+    Object.keys(balances).forEach(k => {
+      balances[k] = Math.round(balances[k] * 100) / 100;
+    });
+
+    // Render balances
+    balancesList.innerHTML = '';
+    Object.entries(balances).forEach(([p, b]) => {
+      const li = document.createElement('li');
+      li.className = 'list-item';
+      const absB = Math.abs(b).toFixed(2);
+      li.textContent = `${p}: ${b < 0 ? 'owes' : 'is owed'} ₹${absB}`;
+      balancesList.appendChild(li);
+    });
+
+    // Greedy settlements
+    const creditors = Object.entries(balances).filter(([_, v]) => v > 0).map(([p, v]) => [p, v]).sort((a, b) => b[1] - a[1]);
+    const debtors = Object.entries(balances).filter(([_, v]) => v < 0).map(([p, v]) => [p, -v]).sort((a, b) => b[1] - a[1]);
+
+    const settlements = [];
+    let i = 0, j = 0;
+    while (i < debtors.length && j < creditors.length) {
+      const [dName, dAmt] = debtors[i];
+      const [cName, cAmt] = creditors[j];
+      const pay = Math.min(dAmt, cAmt);
+      settlements.push(`${dName} -> ${cName}: ₹${pay.toFixed(2)}`);
+      debtors[i][1] -= pay;
+      creditors[j][1] -= pay;
+      if (debtors[i][1] < 0.01) i++;
+      if (creditors[j][1] < 0.01) j++;
+    }
+
+    // Render settlements
+    settlementsList.innerHTML = '';
+    if (settlements.length === 0) {
+      settlementsList.innerHTML = '<div class="settlement">No settlements needed.</div>';
+    } else {
+      settlements.forEach(s => {
+        const div = document.createElement('div');
+        div.className = 'settlement';
+        div.textContent = s;
+        settlementsList.appendChild(div);
+      });
+    }
+  }
+
+  // Add person
+  document.getElementById('addPersonForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = document.getElementById('personName').value.trim();
+    if (!name) return;
+    if (people.some(p => p.name === name)) {
+      alert('Person already exists!');
+      return;
+    }
+    await addDoc(collection(db, 'people'), { name, createdAt: Date.now() });
+    document.getElementById('personName').value = '';
+  });
+
+  // Remove person
+  window.removePerson = async function(id) {
+    // Check if person is involved in any expense
+    const person = people.find(p => p.id === id);
+    if (!person) return;
+
+    const involvedExpense = expenses.find(e =>
+      e.payer === person.name || (e.participants && e.participants.includes(person.name))
+    );
+
+    if (involvedExpense) {
+      alert('Cannot remove person who is involved in expenses. Remove their expenses first.');
+      return;
+    }
+
+    await deleteDoc(doc(db, 'people', id));
+  };
+
+  // Add expense
+  document.getElementById('addExpenseForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const desc = document.getElementById('expenseDesc').value.trim() || 'Expense';
+    const amount = parseFloat(document.getElementById('expenseAmount').value);
+    const payer = document.getElementById('expensePayer').value;
+    const splitMode = document.querySelector('input[name="split_mode"]:checked').value;
+
+    const participantCheckboxes = document.querySelectorAll('input[name="participants"]:checked');
+    const participants = Array.from(participantCheckboxes).map(cb => cb.value);
+
+    if (amount <= 0 || !payer || participants.length === 0) {
+      alert('Please fill all required fields');
+      return;
+    }
+
+    let shares = {};
+    if (splitMode === 'custom') {
+      let total = 0;
+      for (const p of participants) {
+        const input = document.querySelector(`.share-input[data-person="${p}"]`);
+        const val = parseFloat(input.value) || 0;
+        if (val < 0) {
+          alert('Share amounts cannot be negative');
+          return;
+        }
+        shares[p] = val;
+        total += val;
+      }
+      if (Math.abs(total - amount) > 0.01) {
+        alert(`Custom shares (₹${total.toFixed(2)}) must equal expense amount (₹${amount.toFixed(2)})`);
+        return;
+      }
+    }
+
+    await addDoc(collection(db, 'expenses'), {
+      desc,
+      amount,
+      payer,
+      participants,
+      shares: splitMode === 'custom' ? shares : {},
+      createdAt: Date.now()
+    });
+
+    // Reset form
+    document.getElementById('expenseDesc').value = '';
+    document.getElementById('expenseAmount').value = '';
+    document.getElementById('expensePayer').value = '';
+    document.querySelectorAll('input[name="participants"]').forEach(cb => cb.checked = true);
+    document.querySelectorAll('.share-input').forEach(input => input.value = '');
+  });
+
+  // Remove expense
+  window.removeExpense = async function(id) {
+    await deleteDoc(doc(db, 'expenses', id));
+  };
+
+  // Listen for people changes
+  onSnapshot(query(collection(db, 'people'), orderBy('createdAt')), (snapshot) => {
+    people = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    renderPeople();
+    recompute();
+  });
+
+  // Listen for expenses changes
+  onSnapshot(query(collection(db, 'expenses'), orderBy('createdAt')), (snapshot) => {
+    expenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    renderExpenses();
+    recompute();
+  });
+</script>
+
+</body>
+</html>
+

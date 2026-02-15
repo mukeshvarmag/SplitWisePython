@@ -16,6 +16,7 @@ instance/
 # Firebase
 .firebase/
 *.log
+public/firebase-config.js
 
 # OS
 .DS_Store

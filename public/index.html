@@ -115,17 +115,7 @@
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
   import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, where } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
   import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
-
-  // Firebase configuration
-  const firebaseConfig = {
-    apiKey: "AIzaSyDgjAYewYxLwp7-KboFJ76SeuBBC_dxTYw",
-    authDomain: "splitwise-f6602.firebaseapp.com",
-    projectId: "splitwise-f6602",
-    storageBucket: "splitwise-f6602.firebasestorage.app",
-    messagingSenderId: "25314077042",
-    appId: "1:25314077042:web:a175b103ba9d8097bb15eb",
-    measurementId: "G-2H6X12YF5P"
-  };
+  import firebaseConfig from './firebase-config.js';
 
   // Initialize Firebase
   const app = initializeApp(firebaseConfig);
